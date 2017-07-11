@@ -1,0 +1,9 @@
+[package]
+name = "miox"
+version = "0.1.0"
+authors = ["kan <kimikan@kan.com>"]
+
+[dependencies]
+mio="0.6.9"
+byteorder="1.0.0"
+slab="0.3.0"
