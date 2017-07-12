@@ -32,25 +32,22 @@ impl MessageHandler for EchoHandler {
     }
 }
 
+/* main usage */
 fn main() {
-    let s = context::ServerContext::new("127.0.0.1:7777", 127);
+    let listener = context::bind("127.0.0.1:7777").unwrap();
+    let context = context::Context::new(EchoHandler::new(), /* max clients */127);
 
-    if let Some(ctx) = s {
-        let server = server::Server::new(EchoHandler::new());
+    let mut handles = vec![];
+    for _ in 0..3 {
+        let mut server = server::Server::new(listener.try_clone().unwrap()).unwrap();
+        let ctx = context.clone();
+        handles.push(thread::spawn(move || {
+            server.run::<EchoHandler>(&ctx).expect("server run failed");
+        }));
+    }
 
-        let mut handles = vec![];
-        for _ in 0..3 {
-            let clone = ctx.clone();
-            let mut server_clone = server.clone();
-            handles.push(thread::spawn(move || {
-                                           server_clone.run(&clone).expect("server run failed");
-                                       }));
-        }
-
-        for handle in handles {
-            handle.join().unwrap();
-        }
-
+    for handle in handles {
+        handle.join().unwrap();
     }
     println!("app exit!");
 }
