@@ -8,9 +8,10 @@ use std::sync::{Arc, RwLock};
 use std::io;
 use std::io::{Write, Read, Error, ErrorKind};
 
+/* a client with an cnn*/
 pub struct Connection {
     _token: Token,
-    _stream: TcpStream,
+    pub _stream: TcpStream,
 
     //cache the send message between events
     _send_queue: RwLock<Vec<Arc<Vec<u8>>>>,
