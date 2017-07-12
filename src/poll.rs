@@ -2,8 +2,9 @@
 use mio::{Events, Poll, Token, Ready, PollOpt, Evented};
 use std::io;
 
+/* just a wrapper */
 pub struct Poller {
-    _poll: Poll,
+    pub _poll: Poll,
 }
 
 impl Poller {
@@ -16,6 +17,11 @@ impl Poller {
     pub fn poll_once(&self, events: &mut Events) -> io::Result<usize> {
         //println!("poll: {:?} {:?}", self._poll, events);
         self._poll.poll(events, None)
+    }
+
+    pub fn deregister<E:?Sized>(&self, handle:&E)->io::Result<()>
+        where E:Evented {
+            self._poll.deregister(handle)
     }
 
     pub fn register_read<E: ?Sized>(&self, handle: &E, token: Token) -> io::Result<()>
