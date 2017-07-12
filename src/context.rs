@@ -1,74 +1,51 @@
 
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
-use std::sync::atomic::{Ordering, AtomicBool};
 use std::io;
 use std::io::{Error, ErrorKind};
-use mio::{Token, Events};
+use mio::{Token};
 use mio::net::{TcpListener, TcpStream};
 use slab;
 use connection;
-use poll;
-use server::SERVERTOKEN;
+use serialize;
 
-#[derive(Clone)]
-pub struct ServerContext {
-    pub _listener: Arc<RwLock<TcpListener>>,
-    pub _conns: Arc<RwLock<slab::Slab<connection::Connection, Token>>>,
-    pub _poller: Arc<RwLock<poll::Poller>>,
+/* only one tcplistener */
+pub fn bind(addr:&str)->io::Result<TcpListener> {
+    let address = addr.parse::<SocketAddr>();
+    if let Ok(r) = address {
+        return TcpListener::bind(&r);
+    }
 
-    _is_registed: Arc<AtomicBool>,
+    Err(Error::new(ErrorKind::InvalidInput, "Invalid input"))
 }
 
-impl ServerContext {
-    pub fn new(addr: &str, max_clients: usize) -> Option<ServerContext> {
-        if max_clients >= SERVERTOKEN.into() {
-            println!("too many clients, should less than 1_000");
-            return None;
-        }
-        let poller_result = poll::Poller::new();
-        let poller = match poller_result {
-            Ok(p) => p,
-            Err(_) => {
-                return None;
-            }
-        };
+//#[derive(Clone)]
+pub struct Context<T: serialize::MessageHandler + Sized> {
+    pub _conns: Arc<RwLock<slab::Slab<connection::Connection, Token>>>,
+    //the refcell used betten than raw trait
+    //it can callback the mut function when needed
+    pub _handle: Arc<RwLock<T>>,
 
-        let address = addr.parse::<SocketAddr>();
-        if let Ok(r) = address {
-            let listener = TcpListener::bind(&r);
-            println!("binded {:?}", r);
-            if let Ok(l) = listener {
-                return Some(ServerContext {
-                                _listener: Arc::new(RwLock::new(l)),
-                                _conns:
-                                    Arc::new(RwLock::new(slab::Slab::with_capacity(max_clients))),
-                                _poller: Arc::new(RwLock::new(poller)),
-                                _is_registed: Arc::new(AtomicBool::new(false)),
-                            });
-            } else {
-                println!("bind failed,  port used?");
-            }
-        }
+    pub _capacity:usize,
+}
 
-        println!("address format [ip:port]");
-        None
+impl<T: serialize::MessageHandler+Sized> Clone for Context<T> {
+    fn clone(&self) -> Self {
+        Context {
+            _conns:Arc::new(RwLock::new(slab::Slab::with_capacity(self._capacity))),
+            _handle: self._handle.clone(),
+            _capacity:self._capacity,
+        }
     }
+}
 
-    pub fn register_read(&self, token: Token) -> io::Result<()> {
-        if self._is_registed.load(Ordering::SeqCst) {
-            return Ok(());
+impl<T: serialize::MessageHandler + Sized> Context<T> {
+    pub fn new(handle:T, max_clients:usize) -> Self {
+        Context {
+            _conns: Arc::new(RwLock::new(slab::Slab::with_capacity(max_clients))),
+            _handle:Arc::new(RwLock::new(handle)),
+            _capacity:max_clients,
         }
-
-        let poller = self._poller.read().unwrap();
-        let listener_guard = self._listener.read().unwrap();
-        self._is_registed.store(true, Ordering::SeqCst);
-        poller.register_read(&*listener_guard, token)
-    }
-
-    pub fn poll_once(&self, events: &mut Events) -> io::Result<usize> {
-        let poller = self._poller.read().unwrap();
-        poller.poll_once(events)
     }
 
     pub fn remove_client(&self, token: Token) {
@@ -91,17 +68,6 @@ impl ServerContext {
         };
 
         Some(token)
-    }
-
-    pub fn register_token(&self, token: Token) -> io::Result<()> {
-        let clients = self._conns.read().unwrap();
-        let mut poller = self._poller.write().unwrap();
-        if let Some(c) = clients.get(token) {
-            c.register(&mut poller)?;
-            return Ok(());
-        }
-
-        Err(Error::new(ErrorKind::InvalidInput, "Invalid token"))
     }
 
     #[allow(dead_code)]
