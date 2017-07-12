@@ -2,9 +2,12 @@
 it's the multi-thread version of miox.
 
 A mio based tcpserver 
-
 Client Test code:
 
+
+
+
+<src>
 extern crate byteorder;
 
 use std::io::prelude::*;
@@ -57,3 +60,5 @@ fn main() {
 
     loop {}
 }
+
+</src>
