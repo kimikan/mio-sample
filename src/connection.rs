@@ -95,11 +95,11 @@ impl Connection {
     }
 
     pub fn on_write(&mut self) -> io::Result<()> {
-        let msg_op =  {
+        let msg_op = {
             let mut queue = self._send_queue.write().unwrap();
             queue.pop()
         };
-        
+
         if let Some(msg) = msg_op {
             let write_len_result = self.write_message_len(msg.clone());
             match write_len_result {
@@ -175,7 +175,7 @@ impl Connection {
         poll.register_both(&self._stream, self._token)
     }
 
-    pub fn send_message(&mut self, msg: Arc<Vec<u8>>) {
+    pub fn send_message(&self, msg: Arc<Vec<u8>>) {
         let mut queue = self._send_queue.write().unwrap();
         queue.push(msg);
     }

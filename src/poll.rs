@@ -19,30 +19,26 @@ impl Poller {
     }
 
     pub fn register_read<E: ?Sized>(&self, handle: &E, token: Token) -> io::Result<()>
-    where
-        E: Evented,
+        where E: Evented
     {
         self.register(handle, token, Ready::readable(), PollOpt::edge())
     }
 
     pub fn register_both<E: ?Sized>(&self, handle: &E, token: Token) -> io::Result<()>
-    where
-        E: Evented,
+        where E: Evented
     {
         let mut ready = Ready::readable();
         ready.insert(Ready::writable());
         self.register(handle, token, ready, PollOpt::edge())
     }
 
-    pub fn register<E: ?Sized>(
-        &self,
-        handle: &E,
-        token: Token,
-        interest: Ready,
-        opts: PollOpt,
-    ) -> io::Result<()>
-    where
-        E: Evented,
+    pub fn register<E: ?Sized>(&self,
+                               handle: &E,
+                               token: Token,
+                               interest: Ready,
+                               opts: PollOpt)
+                               -> io::Result<()>
+        where E: Evented
     {
         let result = self._poll.register(handle, token, interest, opts)?;
         println!("regist: {:?}, {:?}, {:?}", token, interest, opts);
