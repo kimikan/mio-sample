@@ -8,7 +8,7 @@ it depends rust nightly version.
 
 
 
-<lang:rust>
+<!--lang: rust-->
 extern crate byteorder;
 
 use std::io::prelude::*;
@@ -61,5 +61,4 @@ fn main() {
 
     loop {}
 }
-
-</lang:rust>
+<!--lang: rust-->
