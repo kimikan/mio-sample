@@ -3,11 +3,12 @@ it's the multi-thread version of miox.
 
 A mio based tcpserver 
 Client Test code:
+it depends rust nightly version.
 
 
 
 
-<src>
+<lang:rust>
 extern crate byteorder;
 
 use std::io::prelude::*;
@@ -61,4 +62,4 @@ fn main() {
     loop {}
 }
 
-</src>
+</lang:rust>
