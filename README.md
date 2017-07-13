@@ -61,4 +61,4 @@ fn main() {
 
     loop {}
 }
-```rust
+```
