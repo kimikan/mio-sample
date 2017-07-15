@@ -1,4 +1,5 @@
 
+/*written by kimikan, 2017-7-12*/
 use std::sync::{Arc};
 use std::io;
 use std::io::{Error, ErrorKind};
@@ -14,10 +15,16 @@ pub const SERVERTOKEN: Token = Token(1000_000);
 
 //#[derive(Clone)]
 pub struct Server {
+    //server token.   1000000
     _token: Token,
     _events: Events,
 
+    //a listener repreenst a fd.
+    //so it can be safely copyed.
     _listener:TcpListener,
+
+    //listener fd should be registered 
+    //into every poller instance. 
     _poller:poll::Poller,
 }
 
@@ -52,12 +59,14 @@ impl Server {
         self._poller.poll_once(&mut self._events)
     }
 
+    //th context need a ?sized, handler 
     pub fn unregister_token<T>(&self, ctx:&Context<T>, token:Token)->io::Result<()> 
         where T:serialize::MessageHandler + Sized {
         
         let clients = ctx._conns.read().unwrap();
         let client = clients.get(token);
         if let Some(c) = client {
+            //deregister self from selected poller
             return self._poller.deregister(&c._stream);
         }
         
@@ -67,6 +76,7 @@ impl Server {
     #[allow(dead_code)]
     pub fn unregister<E: ?Sized>(&self, handle:&E)->io::Result<()> 
         where E:Evented {
+            //unregistered self
         self._poller.deregister(handle)
     }
 
@@ -79,17 +89,16 @@ impl Server {
     pub fn run<T>(&mut self, ctx: &Context<T>)  -> io::Result<()>
         where T: serialize::MessageHandler + Sized {
         
-        println!("--------start to register {:?}", self._token);
+        //every run thread instance, need firstly registered
         self.register_read(self._token)?;
-        println!("+++++run {:?} {:?}", self._token, self._listener);
+
         loop {
-            println!("start to poll");
             let size = self.poll_once()?;
-            println!("poll size{}", size);
 
             for i in 0..size {
                 let event_op = self._events.get(i);
                 if let Some(event) = event_op {
+                    //forward and handle event seperately
                     self.on_event(ctx, &event);
                 } else {
                     println!("errror event");
@@ -117,6 +126,7 @@ impl Server {
         let token = event.token();
         if ready.is_error() {
             if let Err(e) = self.unregister_token(ctx, token) {
+                //strictly we should let it panic, but, it should recover
                 println!("-----------------------{:?}", e);
             }
 
@@ -134,6 +144,7 @@ impl Server {
                 println!("forward read, token={:?}", token);
                 match self.dispatch_read(token, ctx) {
                     Err(_) => {
+                        //cache it and remove it later
                         vec.push(token);
                     }
                     Ok(_) => {}
@@ -151,6 +162,7 @@ impl Server {
             }
         }
 
+        //unregister and remove. lifetime
         for token in vec {
             if let Err(e) = self.unregister_token(ctx, token) {
                 println!("-----------------------{:?}", e);
@@ -160,6 +172,7 @@ impl Server {
         }
     }
 
+    //new client connected handler
     fn on_accept<T>(&mut self, ctx: &Context<T>)
         where T : serialize::MessageHandler + Sized {
         loop {
@@ -185,6 +198,7 @@ impl Server {
         }
     }
 
+    //dispatcher all of the read events to registered handler
     fn dispatch_read<T>(&mut self, token: Token, ctx: &Context<T>) -> io::Result<()>
         where T : serialize::MessageHandler + Sized {
         let mut conns = ctx._conns.write().unwrap();

@@ -1,3 +1,5 @@
+
+/*written by kimikan, 2017-7-12*/
 use mio::Token;
 use mio::net::TcpStream;
 
@@ -20,6 +22,11 @@ pub struct Connection {
 }
 
 impl Connection {
+    /*
+     * a connection means a tcpstream,  
+     * and the token needed by the mio must be unique 
+     * it 's managed by the server context.
+     */
     pub fn new(stream: TcpStream, token: Token) -> Connection {
         Connection {
             _token: token,
@@ -40,6 +47,7 @@ impl Connection {
         let len_result = self.read_message_len();
         if let Ok(len) = len_result {
             if len <= 0 {
+                //ewouldblock was returned.
                 return Ok(None);
             } else {
                 let mut vec: Vec<u8> = Vec::with_capacity(len);
@@ -50,10 +58,11 @@ impl Connection {
                 match read_result {
                     Err(e) => {
                         if e.kind() == ErrorKind::WouldBlock {
+                            //cache the len. to continue read in next round
                             self._read_next = len;
                             return Ok(None);
                         } else {
-                            println!("70 {:?}", e);
+                            println!("read error happend {:?}", e);
                             return Err(e);
                         }
                     }
@@ -62,6 +71,7 @@ impl Connection {
                             println!("error message number");
                             return Err(Error::new(ErrorKind::InvalidData, "error message number"));
                         }
+                        //reset the next buffer
                         self._read_next = 0;
                         return Ok(Some(vec));
                     }
@@ -72,8 +82,13 @@ impl Connection {
         }
     }
 
+    /*
+    * message =|message len| message buffer| 
+    */
     fn read_message_len(&mut self) -> io::Result<usize> {
         if self._read_next > 0 {
+            //_read_next,  means that not all of the data has been recevied
+            //in previous around, so just make it whole completed
             return Ok(self._read_next);
         }
         let mut buf = [0u8; 8];
@@ -81,6 +96,9 @@ impl Connection {
             Ok(n) => n,
             Err(e) => {
                 if e.kind() == ErrorKind::WouldBlock {
+                    //0, means current read was blocked.
+                    //it's not a error case,
+                    //should not close socket.
                     return Ok(0);
                 } else {
                     return Err(e);
@@ -89,6 +107,7 @@ impl Connection {
         };
 
         if bytes < 8 {
+            //the message len is u64, so it's 8 bytes long
             return Err(Error::new(ErrorKind::InvalidData, "Invalid message length"));
         }
         let msg_len = BigEndian::read_u64(buf.as_ref());
@@ -97,6 +116,7 @@ impl Connection {
 
     pub fn on_write(&mut self) -> io::Result<()> {
         let msg_op = {
+            //due to this send queue maybe accessed by multi threads
             let mut queue = self._send_queue.write().unwrap();
             queue.pop()
         };
@@ -106,6 +126,9 @@ impl Connection {
             match write_len_result {
                 Ok(b) => {
                     if !b {
+                        //save the error message to queue, so that this message
+                        //can be handled next time.
+                        //it's should be ewould block
                         let mut queue = self._send_queue.write().unwrap();
                         queue.push(msg);
                         return Ok(());
@@ -114,6 +137,9 @@ impl Connection {
                 Err(e) => {
                     //error happend
                     println!("write len failed: {:?}", e);
+                    //in this kind of situation,
+                    //may be close the connection and re-connect
+                    //is a better choice
                     return Err(e);
                 }
             } //end write len
@@ -121,6 +147,7 @@ impl Connection {
             let write_result = self._stream.write(&*msg);
             match write_result {
                 Ok(_) => {
+                    //done , reset the flag, and 
                     self._write_next = false;
                     self._stream.flush()?;
                     return Ok(());
@@ -153,13 +180,16 @@ impl Connection {
         }
 
         let mut len_buf: [u8; 8] = [0u8; 8]; //a u64 buf
-        println!("buf.len {}", len_buf.len());
+        //println!("buf.len {}", len_buf.len());
 
+        //big endian, network order
         BigEndian::write_u64(len_buf.as_mut(), msg.len() as u64);
         let write_result = self._stream.write(&len_buf);
         match write_result {
             Err(e) => {
                 if e.kind() == ErrorKind::WouldBlock {
+                    //wouldblock, should be OK with false result
+                    //to let this message handled in next round
                     return Ok(false);
                 } else {
                     return Err(e);
@@ -176,6 +206,8 @@ impl Connection {
         poll.register_both(&self._stream, self._token)
     }
 
+    //this message should be public to handler
+    //it's multithread.
     pub fn send_message(&self, msg: Arc<Vec<u8>>) {
         let mut queue = self._send_queue.write().unwrap();
         queue.push(msg);
